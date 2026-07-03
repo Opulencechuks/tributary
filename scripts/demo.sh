@@ -15,7 +15,7 @@ b=$(stellar keys address demo-b)
 
 id=$(stellar contract invoke --id splitter --source "$source" --network testnet -- \
   create_split --creator "$payer" \
-  --recipients "[\"$a\",\"$b\"]" --shares "[6000,4000]")
+  --recipients "[{\"Account\":\"$a\"},{\"Account\":\"$b\"}]" --shares "[6000,4000]")
 echo "created split $id"
 
 stellar contract invoke --id splitter --source "$source" --network testnet -- \
