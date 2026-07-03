@@ -22,6 +22,23 @@ export default function CreateSplit({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  function applyTemplate(percents: number[]) {
+    setRows(
+      percents.map((p, i) => ({
+        kind: rows[i]?.kind ?? "address",
+        value: rows[i]?.value ?? "",
+        percent: String(p),
+      })),
+    );
+  }
+
+  const templates: [string, number[]][] = [
+    ["50/50", [50, 50]],
+    ["60/40", [60, 40]],
+    ["Thirds", [33.34, 33.33, 33.33]],
+    ["90/10", [90, 10]],
+  ];
+
   async function submit() {
     if (!wallet) {
       setMessage("Connect your wallet first.");
@@ -59,6 +76,17 @@ export default function CreateSplit({
   return (
     <section className="card">
       <h2>Create a split</h2>
+      <div className="row templates">
+        {templates.map(([label, percents]) => (
+          <button
+            key={label}
+            className="ghost small"
+            onClick={() => applyTemplate(percents)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <RecipientEditor rows={rows} onChange={setRows} />
       <label className="check">
         <input

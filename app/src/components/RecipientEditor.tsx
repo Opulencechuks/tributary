@@ -98,8 +98,8 @@ export default function RecipientEditor({
         >
           Add recipient
         </button>
-        <span className={total === 100 ? "total ok" : "total"}>
-          {total}% of 100%
+        <span className={Math.abs(total - 100) < 0.001 ? "total ok" : "total"}>
+          {Number(total.toFixed(2))}% of 100%
         </span>
       </div>
     </>

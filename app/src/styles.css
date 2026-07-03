@@ -266,6 +266,16 @@ select.kind {
   margin-bottom: 10px;
 }
 
+button.small {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+
+.templates {
+  flex-wrap: wrap;
+}
+
 .check {
   display: flex;
   align-items: center;
