@@ -1,4 +1,10 @@
 #![no_std]
+//! Splits incoming payments between recipients by fixed basis-point shares.
+//!
+//! A split routes to accounts or to other splits. Payments either go straight
+//! through (`pay`) or sit in escrow per split and token (`deposit`) until
+//! someone triggers `distribute`. Share math rounds down and hands the dust
+//! to the last recipient, so amount in always equals amount out.
 
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contractmeta, contracttype, token,
