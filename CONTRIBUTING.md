@@ -36,6 +36,10 @@ cargo test
 - Contract code stays `no_std` and avoids panics in favor of typed errors.
 - Comments only where the code cannot explain itself.
 
+## Useful scripts
+
+`scripts/deploy.sh` builds and deploys the contract to testnet. `scripts/demo.sh` runs a full create-and-pay cycle against the deployed contract, which is the quickest way to confirm your environment works end to end. Both need the [Stellar CLI](https://developers.stellar.org/docs/tools/cli) and a funded testnet identity.
+
 ## Working on an issue
 
 If you want to work on an existing issue, comment on it first so we do not end up with duplicate work. If you found a bug or want to propose something new, open an issue before writing a large patch.
