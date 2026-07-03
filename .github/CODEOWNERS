@@ -1,0 +1,5 @@
+# Fallback reviewers for everything
+* @spagero763
+
+# Money-moving code gets extra scrutiny
+/contracts/ @spagero763
