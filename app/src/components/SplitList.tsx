@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   readClient,
   recipientLabel,
@@ -30,7 +31,14 @@ function Detail({ split }: { split: SplitView }) {
   }, [split.id]);
 
   return (
-    <div className="detail">
+    <motion.div
+      className="detail"
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
+      style={{ overflow: "hidden" }}
+    >
       {split.recipients.map((r, i) => (
         <div className="detail-row" key={i}>
           <span className="mono">
@@ -52,7 +60,7 @@ function Detail({ split }: { split: SplitView }) {
           </span>
         </div>
       ))}
-    </div>
+    </motion.div>
   );
 }
 
@@ -74,12 +82,17 @@ export default function SplitList({
     <section>
       <h2>Recent splits</h2>
       <div className="splits">
-        {splits.map((s) => {
+        {splits.map((s, index) => {
           const key = String(s.id);
           return (
-            <div
+            <motion.div
               className="split"
               key={key}
+              layout
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.3) }}
+              whileHover={{ y: -2 }}
               onClick={() => setOpen(open === key ? null : key)}
             >
               <div className="split-head">
@@ -110,8 +123,10 @@ export default function SplitList({
                   </li>
                 ))}
               </ul>
-              {open === key && <Detail split={s} />}
-            </div>
+              <AnimatePresence>
+                {open === key && <Detail split={s} />}
+              </AnimatePresence>
+            </motion.div>
           );
         })}
       </div>
