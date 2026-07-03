@@ -9,9 +9,26 @@ import {
 export type { Recipient };
 
 export const RPC_URL = "https://soroban-testnet.stellar.org";
-export const XLM_SAC = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 export const EXPLORER = "https://stellar.expert/explorer/testnet";
 export const CONTRACT_ID = networks.testnet.contractId;
+
+export interface Token {
+  code: string;
+  contract: string;
+}
+
+export const TOKENS: Token[] = [
+  {
+    code: "XLM",
+    contract: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+  },
+  {
+    code: "USDC",
+    contract: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+  },
+];
+
+export const XLM_SAC = TOKENS[0].contract;
 
 export interface SplitView {
   id: bigint;
@@ -149,8 +166,9 @@ export function shortAddress(addr: string): string {
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-export function toStroops(xlm: string): bigint {
-  const [whole, frac = ""] = xlm.split(".");
+// Stellar classic assets always use 7 decimals through their SAC.
+export function toStroops(units: string): bigint {
+  const [whole, frac = ""] = units.split(".");
   const padded = (frac + "0000000").slice(0, 7);
   return BigInt(whole || "0") * 10_000_000n + BigInt(padded);
 }
