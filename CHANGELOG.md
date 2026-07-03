@@ -14,6 +14,8 @@
 - Pay and escrow in XLM or USDC
 - Per-recipient payout preview and recent on-chain activity feed
 - Expandable split details with full addresses and escrow balances
+- Actions grouped into tabs, data refreshes in the background every 30s
+- Interface animated with motion, honoring reduced-motion preferences
 - Live at https://tributary-omega.vercel.app
 
 ### SDK
