@@ -3,7 +3,7 @@ import { rpc, scValToNative } from "@stellar/stellar-sdk";
 
 const RPC_URL = process.env.RPC_URL ?? "https://soroban-testnet.stellar.org";
 const CONTRACT_ID =
-  process.env.CONTRACT_ID ?? "CD72QCORFZPWSIHYBPMFJ42MGMESYZ2X5NXIMUT2RAC7TVXUJVVVAFFL";
+  process.env.CONTRACT_ID ?? "CCZXVZUQIZT673QF6ZGLI5AJLEPWUFWVYOPIOJNLNIOO5NI27V4JGJUU";
 const OUT = process.env.OUT ?? "events.ndjson";
 const STATE = process.env.STATE ?? "state.json";
 const POLL_MS = Number(process.env.POLL_MS ?? 10_000);
