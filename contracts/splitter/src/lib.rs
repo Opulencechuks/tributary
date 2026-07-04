@@ -1,4 +1,10 @@
 #![no_std]
+//! Splits incoming payments between recipients by fixed basis-point shares.
+//!
+//! A split routes to accounts or to other splits. Payments either go straight
+//! through (`pay`) or sit in escrow per split and token (`deposit`) until
+//! someone triggers `distribute`. Share math rounds down and hands the dust
+//! to the last recipient, so amount in always equals amount out.
 
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contractmeta, contracttype, token,
@@ -166,6 +172,42 @@ impl Splitter {
         let split = load(&env, id)?;
         payout(&env, &split, &from, &token, amount);
         SplitPaid { id, token, amount }.publish(&env);
+        Ok(())
+    }
+
+    /// Pays several splits from one signer in a single transaction.
+    /// `ids` and `amounts` pair up positionally; any failure reverts all.
+    pub fn pay_many(
+        env: Env,
+        from: Address,
+        ids: Vec<u64>,
+        amounts: Vec<i128>,
+        token: Address,
+    ) -> Result<(), Error> {
+        from.require_auth();
+        if ids.is_empty() {
+            return Err(Error::NoRecipients);
+        }
+        if ids.len() != amounts.len() {
+            return Err(Error::LengthMismatch);
+        }
+        for amount in amounts.iter() {
+            if amount <= 0 {
+                return Err(Error::InvalidAmount);
+            }
+        }
+        for i in 0..ids.len() {
+            let id = ids.get_unchecked(i);
+            let amount = amounts.get_unchecked(i);
+            let split = load(&env, id)?;
+            payout(&env, &split, &from, &token, amount);
+            SplitPaid {
+                id,
+                token: token.clone(),
+                amount,
+            }
+            .publish(&env);
+        }
         Ok(())
     }
 

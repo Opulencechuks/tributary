@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { readClient, walletClient, toStroops, XLM_SAC, SplitView } from "../lib/tributary";
+import {
+  readClient,
+  walletClient,
+  toStroops,
+  fromStroops,
+  TOKENS,
+  SplitView,
+} from "../lib/tributary";
+import TokenPicker from "./TokenPicker";
 
 export default function EscrowCard({
   wallet,
@@ -10,6 +18,7 @@ export default function EscrowCard({
 }) {
   const [splitId, setSplitId] = useState("");
   const [amount, setAmount] = useState("");
+  const [token, setToken] = useState(TOKENS[0]);
   const [pending, setPending] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -22,7 +31,7 @@ export default function EscrowCard({
     try {
       const { result } = await readClient().balance({
         id: BigInt(id),
-        token: XLM_SAC,
+        token: token.contract,
       });
       setPending(result);
     } catch {
@@ -32,7 +41,7 @@ export default function EscrowCard({
 
   useEffect(() => {
     loadPending(splitId);
-  }, [splitId]);
+  }, [splitId, token]);
 
   async function distribute() {
     if (!wallet) {
@@ -49,12 +58,12 @@ export default function EscrowCard({
       const client = walletClient(wallet);
       const tx = await client.distribute({
         id: BigInt(splitId),
-        token: XLM_SAC,
+        token: token.contract,
       });
       const { result } = await tx.signAndSend();
       setMessage(
         result.isOk()
-          ? `Distributed ${(Number(result.unwrap()) / 10_000_000).toLocaleString()} XLM to all recipients.`
+          ? `Distributed ${fromStroops(result.unwrap())} ${token.code} to all recipients.`
           : "Nothing to distribute.",
       );
       await loadPending(splitId);
@@ -81,11 +90,13 @@ export default function EscrowCard({
       const tx = await client.deposit({
         from: wallet,
         id: BigInt(splitId),
-        token: XLM_SAC,
+        token: token.contract,
         amount: toStroops(amount),
       });
       const { result } = await tx.signAndSend();
-      setMessage(result.isOk() ? `Deposited ${amount} XLM.` : "Deposit failed.");
+      setMessage(
+        result.isOk() ? `Deposited ${amount} ${token.code}.` : "Deposit failed.",
+      );
       await loadPending(splitId);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -112,7 +123,7 @@ export default function EscrowCard({
       </div>
       {pending !== null && (
         <p className="hint">
-          Pending: {(Number(pending) / 10_000_000).toLocaleString()} XLM
+          Pending: {fromStroops(pending)} {token.code}
         </p>
       )}
       <div className="row">
@@ -124,7 +135,7 @@ export default function EscrowCard({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
-        <span className="unit">XLM</span>
+        <TokenPicker token={token} onChange={setToken} />
       </div>
       <div className="row">
         <button disabled={busy} onClick={deposit}>

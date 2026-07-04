@@ -5,9 +5,10 @@ import {
   fromStroops,
   previewPayout,
   recipientLabel,
-  XLM_SAC,
+  TOKENS,
   SplitView,
 } from "../lib/tributary";
+import TokenPicker from "./TokenPicker";
 
 export default function PaySplit({
   wallet,
@@ -20,6 +21,7 @@ export default function PaySplit({
 }) {
   const [splitId, setSplitId] = useState("");
   const [amount, setAmount] = useState("");
+  const [token, setToken] = useState(TOKENS[0]);
   const [preview, setPreview] = useState<bigint[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -56,12 +58,14 @@ export default function PaySplit({
       const tx = await client.pay({
         from: wallet,
         id: BigInt(splitId),
-        token: XLM_SAC,
+        token: token.contract,
         amount: toStroops(amount),
       });
       const { result } = await tx.signAndSend();
       setMessage(
-        result.isOk() ? `Paid ${amount} XLM through split #${splitId}.` : "Payment failed.",
+        result.isOk()
+          ? `Paid ${amount} ${token.code} through split #${splitId}.`
+          : "Payment failed.",
       );
       onPaid();
     } catch (e) {
@@ -93,14 +97,16 @@ export default function PaySplit({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
-        <span className="unit">XLM</span>
+        <TokenPicker token={token} onChange={setToken} />
       </div>
       {selected && preview.length === selected.recipients.length && (
         <ul className="preview">
           {selected.recipients.map((r, i) => (
             <li key={i}>
               <span>{recipientLabel(r)}</span>
-              <span>{fromStroops(preview[i])} XLM</span>
+              <span>
+                {fromStroops(preview[i])} {token.code}
+              </span>
             </li>
           ))}
         </ul>

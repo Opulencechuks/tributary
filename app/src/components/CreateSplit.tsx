@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { walletClient, Recipient } from "../lib/tributary";
-
-interface Row {
-  kind: "address" | "split";
-  value: string;
-  percent: string;
-}
+import { walletClient } from "../lib/tributary";
+import RecipientEditor, {
+  Row,
+  rowsError,
+  toRecipient,
+  toShares,
+} from "./RecipientEditor";
 
 export default function CreateSplit({
   wallet,
@@ -18,28 +18,35 @@ export default function CreateSplit({
     { kind: "address", value: "", percent: "60" },
     { kind: "address", value: "", percent: "40" },
   ]);
+  const [editable, setEditable] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  function setRow(i: number, patch: Partial<Row>) {
-    setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  function applyTemplate(percents: number[]) {
+    setRows(
+      percents.map((p, i) => ({
+        kind: rows[i]?.kind ?? "address",
+        value: rows[i]?.value ?? "",
+        percent: String(p),
+      })),
+    );
   }
 
-  const total = rows.reduce((sum, r) => sum + (parseFloat(r.percent) || 0), 0);
-
-  function toRecipient(row: Row): Recipient {
-    return row.kind === "address"
-      ? { tag: "Account", values: [row.value.trim()] }
-      : { tag: "Split", values: [BigInt(row.value)] };
-  }
+  const templates: [string, number[]][] = [
+    ["50/50", [50, 50]],
+    ["60/40", [60, 40]],
+    ["Thirds", [33.34, 33.33, 33.33]],
+    ["90/10", [90, 10]],
+  ];
 
   async function submit() {
     if (!wallet) {
       setMessage("Connect your wallet first.");
       return;
     }
-    if (Math.abs(total - 100) > 0.001) {
-      setMessage("Shares must add up to 100%.");
+    const invalid = rowsError(rows);
+    if (invalid) {
+      setMessage(invalid);
       return;
     }
     setBusy(true);
@@ -49,8 +56,8 @@ export default function CreateSplit({
       const tx = await client.create_split({
         creator: wallet,
         recipients: rows.map(toRecipient),
-        shares: rows.map((r) => Math.round(parseFloat(r.percent) * 100)),
-        controller: undefined,
+        shares: toShares(rows),
+        controller: editable ? wallet : undefined,
       });
       const { result } = await tx.signAndSend();
       setMessage(
@@ -69,56 +76,26 @@ export default function CreateSplit({
   return (
     <section className="card">
       <h2>Create a split</h2>
-      {rows.map((row, i) => (
-        <div className="row" key={i}>
-          <select
-            className="kind"
-            value={row.kind}
-            onChange={(e) =>
-              setRow(i, { kind: e.target.value as Row["kind"], value: "" })
-            }
+      <div className="row templates">
+        {templates.map(([label, percents]) => (
+          <button
+            key={label}
+            className="ghost small"
+            onClick={() => applyTemplate(percents)}
           >
-            <option value="address">Address</option>
-            <option value="split">Split</option>
-          </select>
-          <input
-            placeholder={row.kind === "address" ? "G… recipient address" : "Split id"}
-            value={row.value}
-            onChange={(e) => setRow(i, { value: e.target.value })}
-          />
-          <input
-            className="pct"
-            type="number"
-            min="0"
-            max="100"
-            value={row.percent}
-            onChange={(e) => setRow(i, { percent: e.target.value })}
-          />
-          <span className="unit">%</span>
-          {rows.length > 1 && (
-            <button
-              className="ghost"
-              onClick={() => setRows(rows.filter((_, j) => j !== i))}
-              aria-label="Remove recipient"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
-      <div className="row actions">
-        <button
-          className="ghost"
-          onClick={() =>
-            setRows([...rows, { kind: "address", value: "", percent: "" }])
-          }
-        >
-          Add recipient
-        </button>
-        <span className={total === 100 ? "total ok" : "total"}>
-          {total}% of 100%
-        </span>
+            {label}
+          </button>
+        ))}
       </div>
+      <RecipientEditor rows={rows} onChange={setRows} />
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={editable}
+          onChange={(e) => setEditable(e.target.checked)}
+        />
+        I can edit this split later (uncheck to lock it forever)
+      </label>
       <button disabled={busy} onClick={submit}>
         {busy ? "Waiting for signature…" : "Create split"}
       </button>

@@ -1,43 +1,72 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { motion } from "motion/react";
 import {
   connectWallet,
   fetchSplits,
+  fetchMineIds,
+  fetchActivity,
   shortAddress,
+  ActivityItem,
   SplitView,
   CONTRACT_ID,
   EXPLORER,
 } from "./lib/tributary";
-import CreateSplit from "./components/CreateSplit";
-import PaySplit from "./components/PaySplit";
-import EscrowCard from "./components/EscrowCard";
+import ActionPanel from "./components/ActionPanel";
 import SplitList from "./components/SplitList";
+import Activity from "./components/Activity";
+
+const REFRESH_MS = 30_000;
+
+const rise = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+};
 
 export default function App() {
   const [wallet, setWallet] = useState<string | null>(null);
   const [splits, setSplits] = useState<SplitView[]>([]);
+  const [mine, setMine] = useState<Set<string>>(new Set());
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function refresh() {
-    setLoading(true);
+  const refresh = useCallback(async () => {
     try {
-      setSplits(await fetchSplits());
+      const [nextSplits, nextActivity] = await Promise.all([
+        fetchSplits(),
+        fetchActivity().catch(() => [] as ActivityItem[]),
+      ]);
+      setSplits(nextSplits);
+      setActivity(nextActivity);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     refresh();
-  }, []);
+    const timer = setInterval(() => {
+      if (!document.hidden) refresh();
+    }, REFRESH_MS);
+    const onVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refresh]);
 
   async function onConnect() {
     try {
-      setWallet(await connectWallet());
+      const address = await connectWallet();
+      setWallet(address);
       setError(null);
+      setMine(await fetchMineIds(address));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -49,40 +78,54 @@ export default function App() {
         <div className="brand">
           <img src="/logo.svg" alt="" width="34" height="34" />
           <span>Tributary</span>
+          <span className="badge net">Testnet</span>
         </div>
         <nav>
           <a href="https://github.com/tributary-protocol/tributary">GitHub</a>
           {wallet ? (
             <span className="wallet">{shortAddress(wallet)}</span>
           ) : (
-            <button onClick={onConnect}>Connect Freighter</button>
+            <motion.button whileTap={{ scale: 0.97 }} onClick={onConnect}>
+              Connect Freighter
+            </motion.button>
           )}
         </nav>
       </header>
 
       <main>
-        <section className="intro">
+        <motion.section
+          className="intro"
+          {...rise}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
           <h1>Split payments on Stellar</h1>
           <p>
-            A split routes incoming funds to multiple recipients by fixed
-            percentages, in one transaction. Running on testnet.
+            One transaction in, every recipient paid by their share. Running on
+            testnet.
           </p>
-        </section>
+        </motion.section>
 
         {error && <div className="error">{error}</div>}
 
-        <div className="columns">
-          <CreateSplit wallet={wallet} onCreated={refresh} />
-          <PaySplit wallet={wallet} splits={splits} onPaid={refresh} />
-          <EscrowCard wallet={wallet} splits={splits} />
-        </div>
+        <motion.div
+          {...rise}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.08 }}
+        >
+          <ActionPanel
+            wallet={wallet}
+            splits={splits}
+            onChanged={refresh}
+          />
+        </motion.div>
 
-        <div className="list-head">
-          <SplitList splits={splits} loading={loading} />
-          <button className="ghost" onClick={refresh} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
+        <motion.div
+          {...rise}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.16 }}
+        >
+          <SplitList splits={splits} loading={loading} mine={mine} />
+        </motion.div>
+
+        <Activity items={activity} />
       </main>
 
       <footer>

@@ -2,6 +2,9 @@
 
 # Tributary
 
+[![ci](https://github.com/tributary-protocol/tributary/actions/workflows/ci.yml/badge.svg)](https://github.com/tributary-protocol/tributary/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 Payment splitting on Stellar. Live at [tributary-omega.vercel.app](https://tributary-omega.vercel.app).
 
 A split is a routing rule stored on-chain: a list of recipient addresses and the share each one gets. Once a split exists, anyone can push a payment through it and every recipient gets paid in the same transaction.
@@ -36,6 +39,7 @@ Per-recipient amounts are rounded down and the leftover dust goes to the last re
 | --- | --- |
 | `create_split(creator, recipients, shares, controller)` | Registers a split and returns its id |
 | `pay(from, id, token, amount)` | Splits a payment across all recipients |
+| `pay_many(from, ids, amounts, token)` | Pays several splits in one transaction |
 | `deposit(from, id, token, amount)` | Credits funds to the split without paying out |
 | `distribute(id, token)` | Pays the credited balance out to all recipients |
 | `preview_payout(id, amount)` | Per-recipient amounts a payment would produce |
@@ -54,7 +58,14 @@ Early days. The core contract works, is tested and runs on testnet, but it is no
 
 | Network | Contract |
 | --- | --- |
-| Testnet | `CD72QCORFZPWSIHYBPMFJ42MGMESYZ2X5NXIMUT2RAC7TVXUJVVVAFFL` |
+| Testnet | `CCZXVZUQIZT673QF6ZGLI5AJLEPWUFWVYOPIOJNLNIOO5NI27V4JGJUU` |
+
+## Try it in two minutes
+
+1. Install the [Freighter](https://freighter.app) extension and switch it to Testnet.
+2. Fund your account for free at [friendbot](https://lab.stellar.org/account/fund?$=network$id=testnet).
+3. Open [tributary-omega.vercel.app](https://tributary-omega.vercel.app), connect, and create a split from the Create tab.
+4. Pay through it from the Pay tab and watch both balances land in one transaction.
 
 ## Development
 
