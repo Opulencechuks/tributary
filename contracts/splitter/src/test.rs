@@ -237,6 +237,78 @@ fn rejects_non_positive_amounts() {
 }
 
 #[test]
+fn pay_many_settles_several_splits_at_once() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let b = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, token_client) = fund_token(&s.env, &payer, 10_000);
+
+    let first = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+    let second = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a), acct(&b)],
+        &vec![&s.env, 5_000, 5_000],
+        &None,
+    );
+
+    s.client.pay_many(
+        &payer,
+        &vec![&s.env, first, second],
+        &vec![&s.env, 1_000, 2_000],
+        &token_id,
+    );
+
+    assert_eq!(token_client.balance(&a), 2_000);
+    assert_eq!(token_client.balance(&b), 1_000);
+    assert_eq!(token_client.balance(&payer), 7_000);
+}
+
+#[test]
+fn pay_many_rejects_bad_batches() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, token_client) = fund_token(&s.env, &payer, 10_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    let empty = s
+        .client
+        .try_pay_many(&payer, &vec![&s.env], &vec![&s.env], &token_id);
+    assert_eq!(empty, Err(Ok(Error::NoRecipients)));
+
+    let mismatch = s.client.try_pay_many(
+        &payer,
+        &vec![&s.env, id],
+        &vec![&s.env, 100, 200],
+        &token_id,
+    );
+    assert_eq!(mismatch, Err(Ok(Error::LengthMismatch)));
+
+    let unknown = s.client.try_pay_many(
+        &payer,
+        &vec![&s.env, id, 99],
+        &vec![&s.env, 100, 200],
+        &token_id,
+    );
+    assert_eq!(unknown, Err(Ok(Error::SplitNotFound)));
+    assert_eq!(token_client.balance(&a), 0);
+}
+
+#[test]
 fn pay_requires_the_payers_authorization() {
     let s = setup();
     let creator = Address::generate(&s.env);
