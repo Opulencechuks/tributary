@@ -25,7 +25,7 @@ export default function Activity({ items }: { items: ActivityItem[] }) {
         <AnimatePresence initial={false}>
           {items.map((item) => (
             <motion.li
-              key={item.txHash + item.type + String(item.id)}
+              key={item.eventId}
               layout
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}

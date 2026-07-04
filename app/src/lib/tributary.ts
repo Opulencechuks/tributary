@@ -103,6 +103,7 @@ export async function previewPayout(
 }
 
 export interface ActivityItem {
+  eventId: string;
   type: string;
   id: bigint | undefined;
   amount: bigint | undefined;
@@ -165,6 +166,7 @@ export async function fetchActivity(limit = 12): Promise<ActivityItem[]> {
     }
     if (typeof type !== "string") continue;
     items.push({
+      eventId: ev.id,
       type,
       id: typeof id === "bigint" ? id : undefined,
       amount,
