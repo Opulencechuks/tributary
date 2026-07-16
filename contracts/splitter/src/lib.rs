@@ -52,7 +52,7 @@ pub enum Recipient {
 }
 
 #[contracttype]
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Split {
     pub recipients: Vec<Recipient>,
     pub shares: Vec<u32>,
