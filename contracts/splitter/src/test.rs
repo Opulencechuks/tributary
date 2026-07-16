@@ -271,6 +271,69 @@ fn pay_many_settles_several_splits_at_once() {
 }
 
 #[test]
+fn pay_many_multi_settles_mixed_tokens_at_once() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let b = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_x, client_x) = fund_token(&s.env, &payer, 10_000);
+    let (token_y, client_y) = fund_token(&s.env, &payer, 10_000);
+
+    let first = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+    let second = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&b)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    s.client.pay_many_multi(
+        &payer,
+        &vec![&s.env, first, second],
+        &vec![&s.env, 1_000, 2_000],
+        &vec![&s.env, token_x.clone(), token_y.clone()],
+    );
+
+    assert_eq!(client_x.balance(&a), 1_000);
+    assert_eq!(client_x.balance(&payer), 9_000);
+    assert_eq!(client_y.balance(&b), 2_000);
+    assert_eq!(client_y.balance(&payer), 8_000);
+}
+
+#[test]
+fn pay_many_multi_reverts_the_whole_batch_on_failure() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_x, client_x) = fund_token(&s.env, &payer, 10_000);
+    let (token_y, _) = fund_token(&s.env, &payer, 10_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    let result = s.client.try_pay_many_multi(
+        &payer,
+        &vec![&s.env, id, 99],
+        &vec![&s.env, 100, 200],
+        &vec![&s.env, token_x.clone(), token_y],
+    );
+    assert_eq!(result, Err(Ok(Error::SplitNotFound)));
+    assert_eq!(client_x.balance(&a), 0);
+    assert_eq!(client_x.balance(&payer), 10_000);
+}
+
+#[test]
 fn pay_many_rejects_bad_batches() {
     let s = setup();
     let creator = Address::generate(&s.env);

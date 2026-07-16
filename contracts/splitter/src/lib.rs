@@ -211,6 +211,44 @@ impl Splitter {
         Ok(())
     }
 
+    /// Pays several splits from one signer in a single transaction, each
+    /// with its own token. `ids`, `amounts`, and `tokens` pair up
+    /// positionally; any failure reverts all.
+    pub fn pay_many_multi(
+        env: Env,
+        from: Address,
+        ids: Vec<u64>,
+        amounts: Vec<i128>,
+        tokens: Vec<Address>,
+    ) -> Result<(), Error> {
+        from.require_auth();
+        if ids.is_empty() {
+            return Err(Error::NoRecipients);
+        }
+        if ids.len() != amounts.len() || ids.len() != tokens.len() {
+            return Err(Error::LengthMismatch);
+        }
+        for amount in amounts.iter() {
+            if amount <= 0 {
+                return Err(Error::InvalidAmount);
+            }
+        }
+        for i in 0..ids.len() {
+            let id = ids.get_unchecked(i);
+            let amount = amounts.get_unchecked(i);
+            let token = tokens.get_unchecked(i);
+            let split = load(&env, id)?;
+            payout(&env, &split, &from, &token, amount);
+            SplitPaid {
+                id,
+                token: token.clone(),
+                amount,
+            }
+            .publish(&env);
+        }
+        Ok(())
+    }
+
     /// Replaces the recipients and shares of a mutable split.
     pub fn update_split(
         env: Env,
