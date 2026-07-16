@@ -35,18 +35,26 @@ Both paths round each recipient's amount down and give the leftover to the last 
 
 ### Errors
 
-| Code | Name | Raised when |
-| --- | --- | --- |
-| 1 | NoRecipients | empty recipient list |
-| 2 | LengthMismatch | recipients and shares differ in length |
-| 3 | ZeroShare | a share is 0 |
-| 4 | BadShareTotal | shares do not sum to 10,000 |
-| 5 | SplitNotFound | unknown split id |
-| 6 | SplitImmutable | edit attempted without a controller |
-| 7 | InvalidAmount | amount is zero or negative |
-| 8 | NothingToDistribute | escrow balance is empty |
-| 9 | TooManyRecipients | more than 32 recipients |
-| 10 | BadChildSplit | split recipient is unknown or references itself |
+The `Error` enum is `#[contracterror]` with `#[repr(u32)]`, so each variant
+surfaces to callers as a numeric code. The full per-variant docs live in
+`contracts/splitter/src/lib.rs`; the table below is the integrator reference.
+
+| Code | Name | Meaning | Raised by |
+| --- | --- | --- | --- |
+| 1 | `NoRecipients` | recipient list is empty | `create_split`, `update_split` (via `validate`), `pay_many` (empty `ids`) |
+| 2 | `LengthMismatch` | `recipients` and `shares` differ in length | `create_split`, `update_split` (via `validate`), `pay_many` (mismatched `ids`/`amounts`) |
+| 3 | `ZeroShare` | a share value is `0` | `create_split`, `update_split` (via `validate`) |
+| 4 | `BadShareTotal` | shares do not sum to `TOTAL_SHARES` (10,000), or the sum overflows `u32` | `create_split`, `update_split` (via `validate`) |
+| 5 | `SplitNotFound` | the split `id` does not exist in storage | `pay`, `pay_many`, `update_split`, `transfer_control`, `distribute`, `preview_payout`, `get_split` (all via `load`) |
+| 6 | `SplitImmutable` | an edit was attempted on a split with `controller == None` | `update_split`, `transfer_control` |
+| 7 | `InvalidAmount` | the payment amount is zero or negative | `pay`, `pay_many`, `deposit`, `preview_payout` |
+| 8 | `NothingToDistribute` | `distribute` called on a split/token with an empty escrow balance | `distribute` |
+| 9 | `TooManyRecipients` | more than `MAX_RECIPIENTS` (32) recipients supplied | `create_split`, `update_split` (via `validate`) |
+| 10 | `BadChildSplit` | a `Recipient::Split(child)` reference is unknown, or a split references itself | `create_split`, `update_split` (via `validate`) |
+
+`validate` is the shared gate for `create_split` and `update_split`; it raises
+codes 1–4, 9, and 10. `load` is the shared gate for every call that
+takes a split `id`; it raises code 5.
 
 ### Events
 

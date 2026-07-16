@@ -28,15 +28,41 @@ const TTL_EXTEND_TO: u32 = 120 * DAY_LEDGERS;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u32)]
 pub enum Error {
+    /// Code 1. The recipient list is empty.
+    /// Raised by `create_split`, `update_split` (via `validate`), and
+    /// `pay_many` (empty `ids` list).
     NoRecipients = 1,
+    /// Code 2. The `recipients` and `shares` vectors have different lengths.
+    /// Raised by `create_split`, `update_split` (via `validate`), and
+    /// `pay_many` (mismatched `ids`/`amounts`).
     LengthMismatch = 2,
+    /// Code 3. A share value is `0`.
+    /// Raised by `create_split` and `update_split` (via `validate`).
     ZeroShare = 3,
+    /// Code 4. Shares do not sum to `TOTAL_SHARES` (10_000), or the sum
+    /// overflows `u32`.
+    /// Raised by `create_split` and `update_split` (via `validate`).
     BadShareTotal = 4,
+    /// Code 5. The split `id` does not exist in storage.
+    /// Raised by `pay`, `pay_many`, `update_split`, `transfer_control`,
+    /// `distribute`, `preview_payout`, and `get_split` (all via `load`).
     SplitNotFound = 5,
+    /// Code 6. An edit was attempted on a split with `controller == None`.
+    /// Raised by `update_split` and `transfer_control`.
     SplitImmutable = 6,
+    /// Code 7. The payment amount is zero or negative.
+    /// Raised by `pay`, `pay_many`, `deposit`, and `preview_payout`.
     InvalidAmount = 7,
+    /// Code 8. `distribute` was called on a split/token with an empty
+    /// escrow balance.
+    /// Raised by `distribute`.
     NothingToDistribute = 8,
+    /// Code 9. More than `MAX_RECIPIENTS` (32) recipients were supplied.
+    /// Raised by `create_split` and `update_split` (via `validate`).
     TooManyRecipients = 9,
+    /// Code 10. A `Recipient::Split(child)` reference is unknown, or a split
+    /// references itself (directly or as its own update target).
+    /// Raised by `create_split` and `update_split` (via `validate`).
     BadChildSplit = 10,
 }
 
