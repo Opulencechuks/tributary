@@ -91,7 +91,7 @@ export async function fetchSplits(limit = 25): Promise<SplitView[]> {
 
 export async function fetchMineIds(creator: string): Promise<Set<string>> {
   const { result } = await readClient().splits_of({ creator });
-  return new Set(result.map((id) => String(id)));
+  return new Set(result.map((id: bigint) => String(id)));
 }
 
 export async function previewPayout(
@@ -141,6 +141,7 @@ export async function fetchActivity(limit = 12): Promise<ActivityItem[]> {
     events.push(...res.events);
     if (!res.cursor || res.cursor === cursor) break;
     cursor = res.cursor;
+    if (!cursor) break;
     const cursorLedger = Number(BigInt(cursor.split("-")[0]) >> 32n);
     if (res.events.length < 100 && cursorLedger >= res.latestLedger) break;
   }
