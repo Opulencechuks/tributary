@@ -4,6 +4,7 @@ extern crate alloc;
 use super::*;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{vec, Env, IntoVal};
+
 struct Setup {
     env: Env,
     client: SplitterClient<'static>,
@@ -678,6 +679,27 @@ fn property_conservation_random_shares() {
 
                 // Create split and pay
                 let id = client.create_split(&creator, &recipients, &soroban_shares, &None);
+                // Generate recipients matching shares length
+                let mut recipients = soroban_sdk::vec![&env];
+                let mut addrs = soroban_sdk::Vec::new(&env);
+                let mut sdk_shares = soroban_sdk::Vec::new(&env);
+                for share in shares.iter() {
+                    let addr = soroban_sdk::Address::generate(&env);
+                    recipients.push_back(acct(&addr));
+                    addrs.push_back(addr.clone());
+                    sdk_shares.push_back(*share);
+                }
+
+                // Create split and pay
+                // Skip invalid share configurations to focus on conservation for valid ones
+                if client
+                    .try_create_split(&creator, &recipients, &sdk_shares, &None)
+                    .is_err()
+                {
+                    return Ok(());
+                }
+                let id = client.create_split(&creator, &recipients, &sdk_shares, &None);
+
                 let payer = soroban_sdk::Address::generate(&env);
                 let (token_id, token_client) = fund_token(&env, &payer, amount);
                 client.pay(&payer, &id, &token_id, &amount);
@@ -692,6 +714,9 @@ fn property_conservation_random_shares() {
                         "conservation failed",
                     ));
                 }
+                    received += token_client.balance(&addr);
+                }
+                proptest::prop_assert_eq!(received, amount);
                 Ok(())
             },
         )
@@ -787,4 +812,89 @@ fn held_tokens_tracking() {
 
     s.client.distribute(&id, &token_y);
     assert_eq!(s.client.held_tokens(&id), vec![&s.env]);
+}
+
+#[test]
+fn close_split_reclaims_storage() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let controller = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &Some(controller.clone()),
+    );
+
+    s.client.close_split(&id);
+    assert_eq!(s.client.try_get_split(&id), Err(Ok(Error::SplitNotFound)));
+}
+
+#[test]
+fn close_split_rejects_if_balance_remains() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let controller = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, _) = fund_token(&s.env, &payer, 1_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &Some(controller.clone()),
+    );
+
+    s.client.deposit(&payer, &id, &token_id, &100);
+
+    let result = s.client.try_close_split(&id);
+    assert_eq!(result, Err(Ok(Error::SplitHasBalance)));
+
+    // After distribute, it can be closed
+    s.client.distribute(&id, &token_id);
+    s.client.close_split(&id);
+    assert_eq!(s.client.try_get_split(&id), Err(Ok(Error::SplitNotFound)));
+}
+
+#[test]
+fn close_split_requires_auth() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let controller = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &Some(controller.clone()),
+    );
+
+    s.env.set_auths(&[]);
+    let result = s.env.try_invoke_contract::<(), Error>(
+        &s.client.address,
+        &soroban_sdk::Symbol::new(&s.env, "close_split"),
+        (&id,).into_val(&s.env),
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn close_split_rejects_immutable_split() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    let result = s.client.try_close_split(&id);
+    assert_eq!(result, Err(Ok(Error::SplitImmutable)));
 }

@@ -42,6 +42,7 @@ pub enum Error {
     /// contract stores. Can only happen if a share exceeds TOTAL_SHARES, which
     /// `validate` forbids, but we surface it as a typed error rather than panic.
     ArithmeticOverflow = 11,
+    SplitHasBalance = 12,
 }
 
 #[contracttype]
@@ -52,7 +53,7 @@ pub enum Recipient {
 }
 
 #[contracttype]
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Split {
     pub recipients: Vec<Recipient>,
     pub shares: Vec<u32>,
@@ -89,6 +90,13 @@ pub struct SplitPaid {
 #[contractevent]
 #[derive(Clone)]
 pub struct SplitUpdated {
+    #[topic]
+    pub id: u64,
+}
+
+#[contractevent]
+#[derive(Clone)]
+pub struct SplitClosed {
     #[topic]
     pub id: u64,
 }
@@ -247,6 +255,23 @@ impl Splitter {
         split.controller = new_controller.clone();
         env.storage().persistent().set(&DataKey::Split(id), &split);
         ControlTransferred { id, new_controller }.publish(&env);
+        Ok(())
+    }
+
+    /// Closes a split and reclaims its storage. Only the controller can do this,
+    /// and only if the split holds no balances.
+    pub fn close_split(env: Env, id: u64) -> Result<(), Error> {
+        let split = load(&env, id)?;
+        let controller = split.controller.ok_or(Error::SplitImmutable)?;
+        controller.require_auth();
+
+        let tokens = Self::held_tokens(env.clone(), id);
+        if !tokens.is_empty() {
+            return Err(Error::SplitHasBalance);
+        }
+
+        env.storage().persistent().remove(&DataKey::Split(id));
+        SplitClosed { id }.publish(&env);
         Ok(())
     }
 
