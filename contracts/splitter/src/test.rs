@@ -3,6 +3,7 @@
 use super::*;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{vec, Env, IntoVal};
+use proptest::prelude::*;
 
 struct Setup {
     env: Env,
@@ -620,4 +621,39 @@ fn immutable_split_cannot_be_updated() {
         .client
         .try_update_split(&id, &vec![&s.env, acct(&b)], &vec![&s.env, 10_000]);
     assert_eq!(result, Err(Ok(Error::SplitImmutable)));
+}
+
+#[test]
+fn property_conservation_random_shares() {
+    proptest::prop_assert!(proptest::test_runner::TestRunner::default().run(&(
+        proptest::collection::vec(1u32..=10_000u32, 2..10usize),
+        1i128..1_000_000i128,
+    ), |(shares, amount)| {
+        // Setup environment
+        let env = soroban_sdk::Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(Splitter, ());
+        let client = SplitterClient::new(&env, &contract_id);
+        let creator = soroban_sdk::Address::generate(&env);
+        // Generate recipients matching shares length
+        let mut recipients = soroban_sdk::vec![&env];
+        let mut addrs = Vec::new();
+        for _ in shares.iter() {
+            let addr = soroban_sdk::Address::generate(&env);
+            recipients.push_back(acct(&addr));
+            addrs.push(addr);
+        }
+        // Create split and pay
+        let id = client.create_split(&creator, &recipients, &shares, &None);
+        let payer = soroban_sdk::Address::generate(&env);
+        let (token_id, token_client) = fund_token(&env, &payer, amount);
+        client.pay(&payer, &id, &token_id, &amount);
+        // Sum balances and assert conservation
+        let mut received: i128 = 0;
+        for addr in addrs.iter() {
+            received += token_client.balance(&addr);
+        }
+        prop_assert_eq!(received, amount);
+        Ok(())
+    }).is_ok());
 }
