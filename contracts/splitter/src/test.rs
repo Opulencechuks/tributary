@@ -1,9 +1,9 @@
 #![cfg(test)]
 
 use super::*;
+use proptest::prelude::*;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{vec, Env, IntoVal};
-use proptest::prelude::*;
 
 struct Setup {
     env: Env,
@@ -120,6 +120,53 @@ fn tracks_splits_by_creator() {
     assert_eq!(s.client.splits_of(&other), vec![&s.env, 1]);
     let stranger = Address::generate(&s.env);
     assert_eq!(s.client.splits_of(&stranger), vec![&s.env]);
+}
+
+#[test]
+fn splits_of_paged_and_count() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+
+    // Create 5 splits for one creator so we have more than one page.
+    for _ in 0..5 {
+        s.client.create_split(
+            &creator,
+            &vec![&s.env, acct(&a)],
+            &vec![&s.env, 10_000],
+            &None,
+        );
+    }
+
+    assert_eq!(s.client.splits_of_count(&creator), 5);
+
+    // Page size 2: walk through all 5 items across 3 pages.
+    assert_eq!(
+        s.client.splits_of_paged(&creator, &0, &2),
+        vec![&s.env, 0, 1]
+    );
+    assert_eq!(
+        s.client.splits_of_paged(&creator, &2, &2),
+        vec![&s.env, 2, 3]
+    );
+    assert_eq!(s.client.splits_of_paged(&creator, &4, &2), vec![&s.env, 4]);
+
+    // Start beyond the end returns empty.
+    assert_eq!(s.client.splits_of_paged(&creator, &5, &2), vec![&s.env]);
+
+    // Limit 0 returns empty.
+    assert_eq!(s.client.splits_of_paged(&creator, &0, &0), vec![&s.env]);
+
+    // Full-page fetch equivalent to splits_of.
+    assert_eq!(
+        s.client.splits_of_paged(&creator, &0, &5),
+        vec![&s.env, 0, 1, 2, 3, 4]
+    );
+
+    // A creator with no splits returns empty for both count and paged.
+    let stranger = Address::generate(&s.env);
+    assert_eq!(s.client.splits_of_count(&stranger), 0);
+    assert_eq!(s.client.splits_of_paged(&stranger, &0, &10), vec![&s.env]);
 }
 
 #[test]
@@ -625,47 +672,49 @@ fn immutable_split_cannot_be_updated() {
 
 #[test]
 fn property_conservation_random_shares() {
-    proptest::prop_assert!(
-        proptest::test_runner::TestRunner::default()
-            .run(
-                &(
-                    proptest::collection::vec(1u32..=10_000u32, 2..10usize),
-                    1i128..1_000_000i128,
-                ),
-                |(shares, amount)| {
-                    // Setup environment
-                    let env = soroban_sdk::Env::default();
-                    env.mock_all_auths();
-                    let contract_id = env.register(Splitter, ());
-                    let client = SplitterClient::new(&env, &contract_id);
-                    let creator = soroban_sdk::Address::generate(&env);
+    use proptest::prelude::*;
 
-                    // Generate recipients matching shares length
-                    let mut recipients = soroban_sdk::vec![&env];
-                    let mut addrs = Vec::new();
-                    for _ in shares.iter() {
-                        let addr = soroban_sdk::Address::generate(&env);
-                        recipients.push_back(acct(&addr));
-                        addrs.push(addr);
-                    }
+    let arb = (2usize..=9usize).prop_flat_map(|n| {
+        let max_per_part = 9_999u32 / (n - 1) as u32;
+        proptest::collection::vec(1u32..=max_per_part, (n - 1)..=(n - 1))
+            .prop_map(move |mut parts| {
+                let sum: u32 = parts.iter().sum();
+                parts.push(10_000u32.saturating_sub(sum));
+                parts
+            })
+            .prop_flat_map(|shares| (Just(shares), 1i128..1_000_000i128))
+    });
 
-                    // Create split and pay
-                    let id = client.create_split(&creator, &recipients, &shares, &None);
-                    let payer = soroban_sdk::Address::generate(&env);
-                    let (token_id, token_client) = fund_token(&env, &payer, amount);
-                    client.pay(&payer, &id, &token_id, &amount);
+    let result = proptest::test_runner::TestRunner::default().run(&arb, |(shares, amount)| {
+        let env = soroban_sdk::Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(Splitter, ());
+        let client = SplitterClient::new(&env, &contract_id);
+        let creator = soroban_sdk::Address::generate(&env);
 
-                    // Sum balances and assert conservation
-                    let mut received: i128 = 0;
-                    for addr in addrs.iter() {
-                        received += token_client.balance(&addr);
-                    }
-                    prop_assert_eq!(received, amount);
-                    Ok(())
-                },
-            )
-            .is_ok()
-    );
+        let mut recipients = soroban_sdk::vec![&env];
+        let mut addrs = soroban_sdk::vec![&env];
+        let mut sdk_shares: soroban_sdk::Vec<u32> = soroban_sdk::vec![&env];
+        for &s in &shares {
+            let addr = soroban_sdk::Address::generate(&env);
+            recipients.push_back(acct(&addr));
+            addrs.push_back(addr);
+            sdk_shares.push_back(s);
+        }
+
+        let id = client.create_split(&creator, &recipients, &sdk_shares, &None);
+        let payer = soroban_sdk::Address::generate(&env);
+        let (token_id, token_client) = fund_token(&env, &payer, amount);
+        client.pay(&payer, &id, &token_id, &amount);
+
+        let mut received: i128 = 0;
+        for i in 0..addrs.len() {
+            received += token_client.balance(&addrs.get_unchecked(i));
+        }
+        prop_assert_eq!(received, amount);
+        Ok(())
+    });
+    assert!(result.is_ok());
 }
 
 // Regression for #42: a high-supply token can be paid an amount large enough
@@ -757,5 +806,4 @@ fn held_tokens_tracking() {
 
     s.client.distribute(&id, &token_y);
     assert_eq!(s.client.held_tokens(&id), vec![&s.env]);
-}
 }

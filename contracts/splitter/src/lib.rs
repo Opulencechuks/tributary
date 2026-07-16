@@ -349,6 +349,36 @@ impl Splitter {
             .unwrap_or_else(|| Vec::new(&env))
     }
 
+    pub fn splits_of_paged(env: Env, creator: Address, start: u32, limit: u32) -> Vec<u64> {
+        let all: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Created(creator))
+            .unwrap_or_else(|| Vec::new(&env));
+        let len = all.len();
+        if start >= len || limit == 0 {
+            return Vec::new(&env);
+        }
+        let mut page = Vec::new(&env);
+        let mut i = start;
+        let mut count = 0u32;
+        while i < len && count < limit {
+            page.push_back(all.get_unchecked(i));
+            i += 1;
+            count += 1;
+        }
+        page
+    }
+
+    pub fn splits_of_count(env: Env, creator: Address) -> u32 {
+        let all: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Created(creator))
+            .unwrap_or_else(|| Vec::new(&env));
+        all.len()
+    }
+
     pub fn split_count(env: Env) -> u64 {
         env.storage().instance().get(&DataKey::Count).unwrap_or(0)
     }
