@@ -350,9 +350,11 @@ impl Splitter {
                 env.storage()
                     .persistent()
                     .set(&DataKey::PendingController(id), &addr);
-                env.storage()
-                    .persistent()
-                    .extend_ttl(&DataKey::PendingController(id), TTL_THRESHOLD, TTL_EXTEND_TO);
+                env.storage().persistent().extend_ttl(
+                    &DataKey::PendingController(id),
+                    TTL_THRESHOLD,
+                    TTL_EXTEND_TO,
+                );
                 ControlTransferProposed {
                     id,
                     new_controller: addr,

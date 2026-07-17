@@ -1,6 +1,6 @@
+use soroban_spec::read::from_wasm;
 use std::env;
 use std::fs;
-use soroban_spec::read::from_wasm;
 use stellar_xdr::curr::ScSpecEntry;
 
 fn main() {

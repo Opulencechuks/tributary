@@ -915,7 +915,6 @@ fn every_error_code_maps_to_its_triggering_call() {
     );
 }
 
-
 // Turns arbitrary positive weights into basis-point shares that sum to
 // exactly TOTAL_SHARES, using the same floor-with-remainder-to-last approach
 // as `amounts` in lib.rs, so `create_split`'s share-total check accepts them.
