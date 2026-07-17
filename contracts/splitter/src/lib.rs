@@ -19,6 +19,7 @@ contractmeta!(
 
 pub const TOTAL_SHARES: u32 = 10_000;
 pub const MAX_RECIPIENTS: u32 = 32;
+pub const MAX_CASCADE_DEPTH: u32 = 5;
 
 const DAY_LEDGERS: u32 = 17_280;
 const TTL_THRESHOLD: u32 = 30 * DAY_LEDGERS;
@@ -69,6 +70,8 @@ pub enum Error {
     /// `validate` forbids, but we surface it as a typed error rather than panic.
     ArithmeticOverflow = 11,
     SplitHasBalance = 12,
+    /// Code 13. The cascade depth exceeds the maximum allowed limit.
+    MaxDepthExceeded = 13,
 }
 
 #[contracttype]
@@ -372,35 +375,7 @@ impl Splitter {
     /// Pays out everything credited to the split for the given token.
     /// Anyone can call this; the routing table decides where funds go.
     pub fn distribute(env: Env, id: u64, token: Address) -> Result<i128, Error> {
-        let split = load(&env, id)?;
-        let key = DataKey::Balance(id, token.clone());
-        let amount: i128 = env.storage().persistent().get(&key).unwrap_or(0);
-        if amount <= 0 {
-            return Err(Error::NothingToDistribute);
-        }
-        env.storage().persistent().remove(&key);
-
-        let tokens_key = DataKey::HeldTokens(id);
-        if let Some(mut tokens) = env
-            .storage()
-            .persistent()
-            .get::<_, Vec<Address>>(&tokens_key)
-        {
-            if let Some(idx) = tokens.first_index_of(&token) {
-                tokens.remove(idx);
-                if tokens.is_empty() {
-                    env.storage().persistent().remove(&tokens_key);
-                } else {
-                    env.storage().persistent().set(&tokens_key, &tokens);
-                    env.storage().persistent().extend_ttl(
-                        &tokens_key,
-                        TTL_THRESHOLD,
-                        TTL_EXTEND_TO,
-                    );
-                }
-            }
-        }
-
+        let (split, amount) = distribute_node(&env, id, &token)?;
         payout(
             &env,
             &split,
@@ -410,6 +385,25 @@ impl Splitter {
         );
         Distributed { id, token, amount }.publish(&env);
         Ok(amount)
+    }
+
+    /// Distributes a parent split and recursively distributes any freshly-credited
+    /// direct children (and their children, etc.) in one call, bounded by `max_depth`.
+    ///
+    /// Depth Bound & Gas:
+    /// - Each level of recursion increases the depth. A `max_depth` of 0 only distributes the parent.
+    /// - Each distribution load/writes to persistent storage and does token transfers.
+    /// - To prevent out-of-gas errors or stack overflow, `max_depth` must be limited to `MAX_CASCADE_DEPTH` (5).
+    pub fn distribute_cascade(
+        env: Env,
+        id: u64,
+        token: Address,
+        max_depth: u32,
+    ) -> Result<i128, Error> {
+        if max_depth > MAX_CASCADE_DEPTH {
+            return Err(Error::MaxDepthExceeded);
+        }
+        distribute_recursive(&env, id, &token, 0, max_depth)
     }
 
     /// Returns the exact per-recipient amounts a payment of `amount` would
@@ -601,6 +595,78 @@ fn load(env: &Env, id: u64) -> Result<Split, Error> {
         .persistent()
         .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     Ok(split)
+}
+
+fn distribute_node(env: &Env, id: u64, token: &Address) -> Result<(Split, i128), Error> {
+    let split = load(env, id)?;
+    let key = DataKey::Balance(id, token.clone());
+    let amount: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+    if amount <= 0 {
+        return Err(Error::NothingToDistribute);
+    }
+    env.storage().persistent().remove(&key);
+
+    let tokens_key = DataKey::HeldTokens(id);
+    if let Some(mut tokens) = env
+        .storage()
+        .persistent()
+        .get::<_, Vec<Address>>(&tokens_key)
+    {
+        if let Some(idx) = tokens.first_index_of(token) {
+            tokens.remove(idx);
+            if tokens.is_empty() {
+                env.storage().persistent().remove(&tokens_key);
+            } else {
+                env.storage().persistent().set(&tokens_key, &tokens);
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&tokens_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+            }
+        }
+    }
+    Ok((split, amount))
+}
+
+fn distribute_recursive(
+    env: &Env,
+    id: u64,
+    token: &Address,
+    current_depth: u32,
+    max_depth: u32,
+) -> Result<i128, Error> {
+    let (split, amount) = match distribute_node(env, id, token) {
+        Ok(res) => res,
+        Err(Error::NothingToDistribute) => {
+            if current_depth == 0 {
+                return Err(Error::NothingToDistribute);
+            } else {
+                return Ok(0);
+            }
+        }
+        Err(e) => return Err(e),
+    };
+
+    payout(env, &split, &env.current_contract_address(), token, amount);
+    Distributed {
+        id,
+        token: token.clone(),
+        amount,
+    }
+    .publish(env);
+
+    if current_depth < max_depth {
+        let parts = amounts(env, &split, amount).unwrap_or_else(|_| Vec::new(env));
+        for i in 0..split.recipients.len() {
+            let part = parts.get_unchecked(i);
+            if part > 0 {
+                if let Recipient::Split(child_id) = split.recipients.get_unchecked(i) {
+                    distribute_recursive(env, child_id, token, current_depth + 1, max_depth)?;
+                }
+            }
+        }
+    }
+
+    Ok(amount)
 }
 
 #[cfg(test)]

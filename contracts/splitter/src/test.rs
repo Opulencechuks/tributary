@@ -1004,3 +1004,102 @@ fn immutable_split_cannot_be_updated() {
         .try_update_split(&id, &vec![&s.env, acct(&b)], &vec![&s.env, 10_000]);
     assert_eq!(result, Err(Ok(Error::SplitImmutable)));
 }
+
+#[test]
+fn distribute_cascade_basic() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let leaf_a = Address::generate(&s.env);
+    let leaf_b = Address::generate(&s.env);
+    let direct = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, token_client) = fund_token(&s.env, &payer, 10_000);
+
+    let child = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&leaf_a), acct(&leaf_b)],
+        &vec![&s.env, 5_000, 5_000],
+        &None,
+    );
+    let parent = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&direct), Recipient::Split(child)],
+        &vec![&s.env, 6_000, 4_000],
+        &None,
+    );
+
+    // Pay parent so it has 1_000 tokens deposited
+    s.client.deposit(&payer, &parent, &token_id, &1_000);
+
+    // Distribute with depth=1 (meaning parent and direct children)
+    let amount = s.client.distribute_cascade(&parent, &token_id, &1);
+    assert_eq!(amount, 1_000);
+
+    // direct gets 60% of 1_000 = 600
+    assert_eq!(token_client.balance(&direct), 600);
+    // leaf_a gets 50% of 400 = 200
+    assert_eq!(token_client.balance(&leaf_a), 200);
+    // leaf_b gets 50% of 400 = 200
+    assert_eq!(token_client.balance(&leaf_b), 200);
+
+    // Everything in parent and child is distributed, no balance left in contract
+    assert_eq!(s.client.balance(&parent, &token_id), 0);
+    assert_eq!(s.client.balance(&child, &token_id), 0);
+    assert_eq!(token_client.balance(&s.client.address), 0);
+}
+
+#[test]
+fn distribute_cascade_depth_0() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let leaf_a = Address::generate(&s.env);
+    let leaf_b = Address::generate(&s.env);
+    let direct = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, token_client) = fund_token(&s.env, &payer, 10_000);
+
+    let child = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&leaf_a), acct(&leaf_b)],
+        &vec![&s.env, 5_000, 5_000],
+        &None,
+    );
+    let parent = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&direct), Recipient::Split(child)],
+        &vec![&s.env, 6_000, 4_000],
+        &None,
+    );
+
+    s.client.deposit(&payer, &parent, &token_id, &1_000);
+
+    // Distribute with depth=0 (no cascade to children)
+    let amount = s.client.distribute_cascade(&parent, &token_id, &0);
+    assert_eq!(amount, 1_000);
+
+    assert_eq!(token_client.balance(&direct), 600);
+    // Child gets credited but NOT distributed because depth=0
+    assert_eq!(s.client.balance(&child, &token_id), 400);
+    assert_eq!(token_client.balance(&leaf_a), 0);
+    assert_eq!(token_client.balance(&leaf_b), 0);
+}
+
+#[test]
+fn distribute_cascade_exceeds_max_depth() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, _) = fund_token(&s.env, &payer, 1_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    // MAX_CASCADE_DEPTH is 5, so depth 6 should fail
+    let result = s.client.try_distribute_cascade(&id, &token_id, &6);
+    assert_eq!(result, Err(Ok(Error::MaxDepthExceeded)));
+}
