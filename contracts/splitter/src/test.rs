@@ -667,6 +667,165 @@ fn controller_can_update_mutable_split() {
 }
 
 #[test]
+fn every_error_code_maps_to_its_triggering_call() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let controller = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let b = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, _) = fund_token(&s.env, &payer, 1_000);
+
+    // 1 NoRecipients — create_split with empty recipients (via validate)
+    assert_eq!(
+        s.client
+            .try_create_split(&creator, &vec![&s.env], &vec![&s.env], &None),
+        Err(Ok(Error::NoRecipients))
+    );
+    // 1 NoRecipients — pay_many with empty ids
+    assert_eq!(
+        s.client
+            .try_pay_many(&payer, &vec![&s.env], &vec![&s.env], &token_id),
+        Err(Ok(Error::NoRecipients))
+    );
+
+    // 2 LengthMismatch — create_split recipients/shares length differ (via validate)
+    assert_eq!(
+        s.client.try_create_split(
+            &creator,
+            &vec![&s.env, acct(&a), acct(&b)],
+            &vec![&s.env, 10_000],
+            &None,
+        ),
+        Err(Ok(Error::LengthMismatch))
+    );
+    // 2 LengthMismatch — pay_many ids/amounts length differ
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+    assert_eq!(
+        s.client.try_pay_many(
+            &payer,
+            &vec![&s.env, id],
+            &vec![&s.env, 100, 200],
+            &token_id,
+        ),
+        Err(Ok(Error::LengthMismatch))
+    );
+
+    // 3 ZeroShare — create_split with a zero share (via validate)
+    assert_eq!(
+        s.client.try_create_split(
+            &creator,
+            &vec![&s.env, acct(&a), acct(&b)],
+            &vec![&s.env, 10_000, 0],
+            &None,
+        ),
+        Err(Ok(Error::ZeroShare))
+    );
+
+    // 4 BadShareTotal — create_split shares do not sum to 10_000 (via validate)
+    assert_eq!(
+        s.client.try_create_split(
+            &creator,
+            &vec![&s.env, acct(&a), acct(&b)],
+            &vec![&s.env, 5_000, 4_000],
+            &None,
+        ),
+        Err(Ok(Error::BadShareTotal))
+    );
+
+    // 5 SplitNotFound — pay references an unknown split (via load)
+    assert_eq!(
+        s.client.try_pay(&payer, &99, &token_id, &100),
+        Err(Ok(Error::SplitNotFound))
+    );
+
+    // 6 SplitImmutable — update_split on a locked split (controller == None)
+    let locked = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+    assert_eq!(
+        s.client
+            .try_update_split(&locked, &vec![&s.env, acct(&a)], &vec![&s.env, 10_000]),
+        Err(Ok(Error::SplitImmutable))
+    );
+    // 6 SplitImmutable — transfer_control on a locked split
+    assert_eq!(
+        s.client
+            .try_transfer_control(&locked, &Some(controller.clone())),
+        Err(Ok(Error::SplitImmutable))
+    );
+
+    // 7 InvalidAmount — pay with zero amount
+    assert_eq!(
+        s.client.try_pay(&payer, &id, &token_id, &0),
+        Err(Ok(Error::InvalidAmount))
+    );
+    // 7 InvalidAmount — deposit with zero amount
+    assert_eq!(
+        s.client.try_deposit(&payer, &id, &token_id, &0),
+        Err(Ok(Error::InvalidAmount))
+    );
+    // 7 InvalidAmount — preview_payout with zero amount
+    assert_eq!(
+        s.client.try_preview_payout(&id, &0),
+        Err(Ok(Error::InvalidAmount))
+    );
+
+    // 8 NothingToDistribute — distribute with empty escrow balance
+    assert_eq!(
+        s.client.try_distribute(&id, &token_id),
+        Err(Ok(Error::NothingToDistribute))
+    );
+
+    // 9 TooManyRecipients — create_split with > 32 recipients (via validate)
+    let mut recipients = vec![&s.env, acct(&a)];
+    let mut shares = vec![&s.env, 300u32];
+    for _ in 0..32 {
+        recipients.push_back(acct(&Address::generate(&s.env)));
+        shares.push_back(300u32);
+    }
+    assert_eq!(
+        s.client
+            .try_create_split(&creator, &recipients, &shares, &None),
+        Err(Ok(Error::TooManyRecipients))
+    );
+
+    // 10 BadChildSplit — create_split referencing an unknown split (via validate)
+    assert_eq!(
+        s.client.try_create_split(
+            &creator,
+            &vec![&s.env, acct(&a), Recipient::Split(7)],
+            &vec![&s.env, 5_000, 5_000],
+            &None,
+        ),
+        Err(Ok(Error::BadChildSplit))
+    );
+    // 10 BadChildSplit — update_split referencing itself (via validate)
+    let mutable = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &Some(controller.clone()),
+    );
+    assert_eq!(
+        s.client.try_update_split(
+            &mutable,
+            &vec![&s.env, acct(&a), Recipient::Split(mutable)],
+            &vec![&s.env, 5_000, 5_000],
+        ),
+        Err(Ok(Error::BadChildSplit))
+    );
+}
+
+#[test]
 fn immutable_split_cannot_be_updated() {
     let s = setup();
     let creator = Address::generate(&s.env);
