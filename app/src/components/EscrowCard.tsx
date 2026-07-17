@@ -12,9 +12,11 @@ import TokenPicker from "./TokenPicker";
 export default function EscrowCard({
   wallet,
   splits,
+  selectedSplitId,
 }: {
   wallet: string | null;
   splits: SplitView[];
+  selectedSplitId?: string;
 }) {
   const [splitId, setSplitId] = useState("");
   const [amount, setAmount] = useState("");
@@ -22,6 +24,12 @@ export default function EscrowCard({
   const [pending, setPending] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedSplitId !== undefined) {
+      setSplitId(selectedSplitId);
+    }
+  }, [selectedSplitId]);
 
   async function loadPending(id: string) {
     if (id === "") {

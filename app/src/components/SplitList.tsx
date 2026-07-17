@@ -1,80 +1,21 @@
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import {
-  readClient,
-  recipientLabel,
-  fromStroops,
-  SplitView,
-  TOKENS,
   EXPLORER,
+  recipientLabel,
+  SplitView,
 } from "../lib/tributary";
-
-function Detail({ split }: { split: SplitView }) {
-  const [balances, setBalances] = useState<{ code: string; amount: bigint }[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all(
-      TOKENS.map(async (t) => {
-        const { result } = await readClient().balance({
-          id: split.id,
-          token: t.contract,
-        });
-        return { code: t.code, amount: result };
-      }),
-    ).then((all) => {
-      if (active) setBalances(all.filter((b) => b.amount > 0n));
-    });
-    return () => {
-      active = false;
-    };
-  }, [split.id]);
-
-  return (
-    <motion.div
-      className="detail"
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
-      style={{ overflow: "hidden" }}
-    >
-      {split.recipients.map((r, i) => (
-        <div className="detail-row" key={i}>
-          <span className="mono">
-            {r.tag === "Account" ? r.values[0] : `split #${String(r.values[0])}`}
-          </span>
-          <span>{(split.shares[i] / 100).toFixed(2).replace(/\.?0+$/, "")}%</span>
-        </div>
-      ))}
-      {split.controller && (
-        <div className="detail-row">
-          <span className="mono">controller: {split.controller}</span>
-        </div>
-      )}
-      {balances.map((b) => (
-        <div className="detail-row" key={b.code}>
-          <span>escrow</span>
-          <span>
-            {fromStroops(b.amount)} {b.code}
-          </span>
-        </div>
-      ))}
-    </motion.div>
-  );
-}
 
 export default function SplitList({
   splits,
   loading,
   mine,
+  onOpenSplit,
 }: {
   splits: SplitView[];
   loading: boolean;
   mine: Set<string>;
+  onOpenSplit: (id: string) => void;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
-
   if (loading) return <p className="note">Loading splits…</p>;
   if (splits.length === 0) {
     return (
@@ -104,15 +45,25 @@ export default function SplitList({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.3) }}
               whileHover={{ y: -2 }}
-              onClick={() => setOpen(open === key ? null : key)}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open split #${key}`}
+              onClick={() => onOpenSplit(key)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpenSplit(key);
+                }
+              }}
             >
               <div className="split-head">
                 <span className="split-id">#{key}</span>
-                <span>
+                <span className="split-meta">
                   {mine.has(key) && <span className="badge own">yours</span>}{" "}
                   <span className="badge">
                     {s.controller ? "mutable" : "locked"}
-                  </span>
+                  </span>{" "}
+                  <span className="badge">open</span>
                 </span>
               </div>
               <ul>
@@ -130,13 +81,16 @@ export default function SplitList({
                     ) : (
                       <span className="nested">{recipientLabel(r)}</span>
                     )}
-                    <span>{(s.shares[i] / 100).toFixed(2).replace(/\.?0+$/, "")}%</span>
+                    <span>
+                      {(s.shares[i] / 100).toFixed(2).replace(/\.?0+$/, "")}%
+                    </span>
                   </li>
                 ))}
               </ul>
-              <AnimatePresence>
-                {open === key && <Detail split={s} />}
-              </AnimatePresence>
+              <p className="note">
+                Open this split to see balances, copy a link, pay it or manage
+                it.
+              </p>
             </motion.div>
           );
         })}
