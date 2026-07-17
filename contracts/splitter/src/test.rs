@@ -2,6 +2,7 @@
 extern crate alloc;
 
 use super::*;
+use proptest::prelude::*;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{vec, Env, IntoVal};
 
@@ -120,6 +121,53 @@ fn tracks_splits_by_creator() {
     assert_eq!(s.client.splits_of(&other), vec![&s.env, 1]);
     let stranger = Address::generate(&s.env);
     assert_eq!(s.client.splits_of(&stranger), vec![&s.env]);
+}
+
+#[test]
+fn splits_of_paged_and_count() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+
+    // Create 5 splits for one creator so we have more than one page.
+    for _ in 0..5 {
+        s.client.create_split(
+            &creator,
+            &vec![&s.env, acct(&a)],
+            &vec![&s.env, 10_000],
+            &None,
+        );
+    }
+
+    assert_eq!(s.client.splits_of_count(&creator), 5);
+
+    // Page size 2: walk through all 5 items across 3 pages.
+    assert_eq!(
+        s.client.splits_of_paged(&creator, &0, &2),
+        vec![&s.env, 0, 1]
+    );
+    assert_eq!(
+        s.client.splits_of_paged(&creator, &2, &2),
+        vec![&s.env, 2, 3]
+    );
+    assert_eq!(s.client.splits_of_paged(&creator, &4, &2), vec![&s.env, 4]);
+
+    // Start beyond the end returns empty.
+    assert_eq!(s.client.splits_of_paged(&creator, &5, &2), vec![&s.env]);
+
+    // Limit 0 returns empty.
+    assert_eq!(s.client.splits_of_paged(&creator, &0, &0), vec![&s.env]);
+
+    // Full-page fetch equivalent to splits_of.
+    assert_eq!(
+        s.client.splits_of_paged(&creator, &0, &5),
+        vec![&s.env, 0, 1, 2, 3, 4]
+    );
+
+    // A creator with no splits returns empty for both count and paged.
+    let stranger = Address::generate(&s.env);
+    assert_eq!(s.client.splits_of_count(&stranger), 0);
+    assert_eq!(s.client.splits_of_paged(&stranger, &0, &10), vec![&s.env]);
 }
 
 #[test]
