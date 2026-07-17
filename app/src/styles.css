@@ -530,9 +530,44 @@ footer {
   color: var(--muted);
 }
 
+select.lang-select {
+  width: auto;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+select.lang-select:focus {
+  border-color: var(--accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
     transition: none !important;
   }
+}
+
+@media (max-width: 640px){
+  .page { padding: 0 16px 48px; }
+  .intro h1 { font-size: 28px; }
+  header { flex-wrap: wrap; gap: 8px; }
+  nav { gap: 8px; }
+  .card { padding: 16px; }
+  .row { flex-wrap: wrap; gap: 6px; }
+}
+
+@media (max-width: 480px){
+  .page { padding: 0 12px 32px; }
+  .tabs { overflow-x: auto; gap: 2px; -webkit-overflow-scrolling: touch; }
+  .tab { padding: 10px 8px; font-size: 13px; white-space: nowrap; }
+  .tab-line { left: 6px; right: 6px; }
+  .card { padding: 12px; border-radius: 10px; }
+  .intro h1 { font-size: 22px; }
+  select.kind, input.pct { width: 100%; flex: none; }
+  .row.actions { gap: 6px; }
+  button.small { font-size: 11px; padding: 4px 8px; }
 }

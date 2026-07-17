@@ -8,6 +8,7 @@ import {
   TOKENS,
   SplitView,
 } from "../lib/tributary";
+import { useTranslation } from "../lib/i18n";
 import TokenPicker from "./TokenPicker";
 
 export default function PaySplit({
@@ -21,6 +22,7 @@ export default function PaySplit({
   selectedSplitId?: string;
   onPaid: () => void;
 }) {
+  const { t } = useTranslation();
   const [splitId, setSplitId] = useState("");
   const [amount, setAmount] = useState("");
   const [token, setToken] = useState(TOKENS[0]);
@@ -52,11 +54,11 @@ export default function PaySplit({
 
   async function submit() {
     if (!wallet) {
-      setMessage("Connect your wallet first.");
+      setMessage(t("connectWalletFirst"));
       return;
     }
     if (splitId === "" || !amount) {
-      setMessage("Pick a split and an amount.");
+      setMessage(t("pickSplitAndAmount"));
       return;
     }
     setBusy(true);
@@ -72,8 +74,8 @@ export default function PaySplit({
       const { result } = await tx.signAndSend();
       setMessage(
         result.isOk()
-          ? `Paid ${amount} ${token.code} through split #${splitId}.`
-          : "Payment failed.",
+          ? t("paySuccess", { amount, token: token.code, id: splitId })
+          : t("payFailed"),
       );
       onPaid();
     } catch (e) {
@@ -85,13 +87,13 @@ export default function PaySplit({
 
   return (
     <section className="card">
-      <h2>Pay through a split</h2>
+      <h2>{t("payTitle")}</h2>
       <div className="row">
         <select value={splitId} onChange={(e) => setSplitId(e.target.value)}>
-          <option value="">Choose split</option>
+          <option value="">{t("chooseSplit")}</option>
           {splits.map((s) => (
             <option key={String(s.id)} value={String(s.id)}>
-              #{String(s.id)} · {s.recipients.length} recipients
+              #{String(s.id)} · {t("recipientsCount", { count: s.recipients.length })}
             </option>
           ))}
         </select>
@@ -101,7 +103,7 @@ export default function PaySplit({
           type="number"
           min="0"
           step="0.0000001"
-          placeholder="Amount"
+          placeholder={t("amount")}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
@@ -120,7 +122,7 @@ export default function PaySplit({
         </ul>
       )}
       <button disabled={busy} onClick={submit}>
-        {busy ? "Waiting for signature…" : "Pay"}
+        {busy ? t("waitingForSignature") : t("payButton")}
       </button>
       {message && <p className="note">{message}</p>}
     </section>

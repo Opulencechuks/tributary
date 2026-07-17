@@ -107,7 +107,7 @@ export async function fetchSplitById(id: bigint): Promise<SplitView | null> {
 
 export async function fetchMineIds(creator: string): Promise<Set<string>> {
   const { result } = await readClient().splits_of({ creator });
-  return new Set(result.map((id) => String(id)));
+  return new Set(result.map((id: bigint) => String(id)));
 }
 
 export async function previewPayout(
@@ -157,6 +157,7 @@ export async function fetchActivity(limit = 12): Promise<ActivityItem[]> {
     events.push(...res.events);
     if (!res.cursor || res.cursor === cursor) break;
     cursor = res.cursor;
+    if (!cursor) break;
     const cursorLedger = Number(BigInt(cursor.split("-")[0]) >> 32n);
     if (res.events.length < 100 && cursorLedger >= res.latestLedger) break;
   }
@@ -219,4 +220,11 @@ export function fromStroops(stroops: bigint): string {
   return (Number(stroops) / 10_000_000).toLocaleString(undefined, {
     maximumFractionDigits: 7,
   });
+}
+
+/** Format a decimal-string amount with locale-aware thousands separators. */
+export function formatAmount(units: string): string {
+  const num = parseFloat(units);
+  if (Number.isNaN(num)) return units;
+  return num.toLocaleString(undefined, { maximumFractionDigits: 7 });
 }

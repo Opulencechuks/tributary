@@ -7,10 +7,21 @@ import {
   connectWallet,
   shortAddress,
 } from "./lib/tributary";
-import DashboardPage from "./pages/DashboardPage";
-import SplitPage from "./pages/SplitPage";
+import { useTranslation } from "./lib/i18n";
+import ActionPanel from "./components/ActionPanel";
+import SplitList from "./components/SplitList";
+import Activity from "./components/Activity";
+import LanguageSwitcher from "./components/LanguageSwitcher";
+
+const REFRESH_MS = 30_000;
+
+const rise = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+};
 
 export default function App() {
+  const { t } = useTranslation();
   const [wallet, setWallet] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,21 +40,32 @@ export default function App() {
         <Link to="/" className="brand" aria-label="Tributary home">
           <img src="/logo.svg" alt="" width="34" height="34" />
           <span>Tributary</span>
-          <span className="badge net">Testnet</span>
-        </Link>
+          <span className="badge net">{t("testnet")}</span>
+        </div>
         <nav>
-          <a href="https://github.com/tributary-protocol/tributary">GitHub</a>
+          <LanguageSwitcher />
+          <a href="https://github.com/tributary-protocol/tributary">{t("github")}</a>
           {wallet ? (
             <span className="wallet">{shortAddress(wallet)}</span>
           ) : (
             <motion.button whileTap={{ scale: 0.97 }} onClick={onConnect}>
-              Connect Freighter
+              {t("connectWallet")}
             </motion.button>
           )}
         </nav>
       </header>
 
-      {error && <div className="error">{error}</div>}
+      <main>
+        <motion.section
+          className="intro"
+          {...rise}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          <h1>{t("introTitle")}</h1>
+          <p>
+            {t("introDesc")}
+          </p>
+        </motion.section>
 
       <main>
         <Routes>
@@ -68,7 +90,7 @@ export default function App() {
 
       <footer>
         <span>Apache-2.0</span>
-        <a href={`${EXPLORER}/contract/${CONTRACT_ID}`}>Contract on testnet</a>
+        <a href={`${EXPLORER}/contract/${CONTRACT_ID}`}>{t("contractOnTestnet")}</a>
         <a href="https://github.com/tributary-protocol/tributary">
           tributary-protocol/tributary
         </a>
