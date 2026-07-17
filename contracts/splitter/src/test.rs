@@ -1103,3 +1103,141 @@ fn distribute_cascade_exceeds_max_depth() {
     let result = s.client.try_distribute_cascade(&id, &token_id, &6);
     assert_eq!(result, Err(Ok(Error::MaxDepthExceeded)));
 }
+
+#[test]
+fn distribute_all_tokens_multiple_balances() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let b = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+
+    let (t1, _) = fund_token(&s.env, &payer, 10_000);
+    let (t2, _) = fund_token(&s.env, &payer, 10_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a), acct(&b)],
+        &vec![&s.env, 6_000, 4_000],
+        &None,
+    );
+
+    s.client.deposit(&payer, &id, &t1, &1_000);
+    s.client.deposit(&payer, &id, &t2, &2_000);
+
+    let res = s.client.distribute_all_tokens(&id, &None);
+
+    let expected = vec![
+        &s.env,
+        TokenDistribution {
+            token: t1.clone(),
+            amount: 1_000,
+        },
+        TokenDistribution {
+            token: t2.clone(),
+            amount: 2_000,
+        },
+    ];
+    assert_eq!(res, expected);
+
+    assert_eq!(s.client.balance(&id, &t1), 0);
+    assert_eq!(s.client.balance(&id, &t2), 0);
+}
+
+#[test]
+fn distribute_all_tokens_explicit_list() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+
+    let (t1, _) = fund_token(&s.env, &payer, 10_000);
+    let (t2, _) = fund_token(&s.env, &payer, 10_000);
+    let (t3, _) = fund_token(&s.env, &payer, 10_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    s.client.deposit(&payer, &id, &t1, &1_000);
+    s.client.deposit(&payer, &id, &t2, &2_000);
+    s.client.deposit(&payer, &id, &t3, &3_000);
+
+    let res = s.client.distribute_all_tokens(&id, &Some(vec![&s.env, t1.clone(), t3.clone()]));
+
+    let expected = vec![
+        &s.env,
+        TokenDistribution {
+            token: t1.clone(),
+            amount: 1_000,
+        },
+        TokenDistribution {
+            token: t3.clone(),
+            amount: 3_000,
+        },
+    ];
+    assert_eq!(res, expected);
+
+    assert_eq!(s.client.balance(&id, &t1), 0);
+    assert_eq!(s.client.balance(&id, &t2), 2_000); // untouched
+    assert_eq!(s.client.balance(&id, &t3), 0);
+}
+
+#[test]
+fn distribute_all_tokens_zero_balances() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (t1, _) = fund_token(&s.env, &payer, 10_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    // No balances
+    let res = s.client.distribute_all_tokens(&id, &None);
+    assert_eq!(res, vec![&s.env]);
+
+    // Explicitly check zero-balance token is skipped and doesn't throw NothingToDistribute
+    let res2 = s.client.distribute_all_tokens(&id, &Some(vec![&s.env, t1]));
+    assert_eq!(res2, vec![&s.env]);
+}
+
+#[test]
+fn distribute_all_tokens_too_many_tokens() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    let mut tokens = vec![&s.env];
+    for _ in 0..11 {
+        let (t, _) = fund_token(&s.env, &payer, 1_000);
+        tokens.push_back(t);
+    }
+
+    let res = s.client.try_distribute_all_tokens(&id, &Some(tokens));
+    assert_eq!(res, Err(Ok(Error::TooManyTokens)));
+}
+
+#[test]
+fn distribute_all_tokens_not_found() {
+    let s = setup();
+    let res = s.client.try_distribute_all_tokens(&999, &None);
+    assert_eq!(res, Err(Ok(Error::SplitNotFound)));
+}
+
