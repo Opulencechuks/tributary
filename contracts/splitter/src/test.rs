@@ -2,7 +2,6 @@
 extern crate alloc;
 
 use super::*;
-use proptest::prelude::*;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{vec, Env, IntoVal};
 
