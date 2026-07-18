@@ -100,6 +100,8 @@ app                  web dashboard (Vite + React, Freighter wallet)
 
 [docs/glossary.md](docs/glossary.md) defines core terms like split, share, controller, escrow and dust.
 
+[docs/preview-payout.md](docs/preview-payout.md) shows how to preview a payout with `preview_payout` before paying.
+
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get set up and what a good change looks like.
