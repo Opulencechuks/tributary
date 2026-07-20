@@ -76,6 +76,8 @@ pub enum Error {
     MaxDepthExceeded = 13,
     /// Code 14. The number of tokens to distribute exceeds the allowed limit.
     TooManyTokens = 14,
+    /// Code 15. No pending control transfer exists for this split.
+    NoPendingTransfer = 15,
 }
 
 #[contracttype]
@@ -537,10 +539,7 @@ impl Splitter {
                 amount,
             }
             .publish(&env);
-            distributions.push_back(TokenDistribution {
-                token,
-                amount,
-            });
+            distributions.push_back(TokenDistribution { token, amount });
         }
         Ok(distributions)
     }

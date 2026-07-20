@@ -53,7 +53,9 @@ export const Errors = {
   10: {message:"BadChildSplit"},
   11: {message:"ArithmeticOverflow"},
   12: {message:"SplitHasBalance"},
-  13: {message:"NoPendingTransfer"},
+  13: {message:"MaxDepthExceeded"},
+  14: {message:"TooManyTokens"},
+  15: {message:"NoPendingTransfer"},
 }
 
 

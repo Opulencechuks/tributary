@@ -1363,7 +1363,9 @@ fn distribute_all_tokens_explicit_list() {
     s.client.deposit(&payer, &id, &t2, &2_000);
     s.client.deposit(&payer, &id, &t3, &3_000);
 
-    let res = s.client.distribute_all_tokens(&id, &Some(vec![&s.env, t1.clone(), t3.clone()]));
+    let res = s
+        .client
+        .distribute_all_tokens(&id, &Some(vec![&s.env, t1.clone(), t3.clone()]));
 
     let expected = vec![
         &s.env,
@@ -1437,4 +1439,3 @@ fn distribute_all_tokens_not_found() {
     let res = s.client.try_distribute_all_tokens(&999, &None);
     assert_eq!(res, Err(Ok(Error::SplitNotFound)));
 }
-
