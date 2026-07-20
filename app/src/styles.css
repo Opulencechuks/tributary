@@ -739,3 +739,51 @@ select.lang-select:focus {
   .row.actions { gap: 6px; }
   button.small { font-size: 11px; padding: 4px 8px; }
 }
+
+/* Trustline warnings */
+.trustline-warn {
+  background: #2a1420;
+  border: 1px solid #8b2b4a;
+  border-radius: 9px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  color: #f0a0b8;
+  font-size: 13px;
+}
+
+.trustline-warn strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #f04070;
+}
+
+.trustline-warn ul,
+.trustline-notice ul {
+  padding-left: 16px;
+  margin: 4px 0;
+}
+
+.trustline-warn ul li,
+.trustline-notice ul li {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  padding: 1px 0;
+  overflow-wrap: anywhere;
+}
+
+/* Inconclusive / degraded-gracefully notice */
+.trustline-notice {
+  background: #1a1e2e;
+  border: 1px solid #3a4a70;
+  border-radius: 9px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.trustline-notice strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+}
