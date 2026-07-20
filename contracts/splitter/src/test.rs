@@ -8,7 +8,8 @@
 extern crate alloc;
 
 use super::*;
-use soroban_sdk::testutils::Address as _;
+use soroban_sdk::testutils::storage::Persistent;
+use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::{vec, Env, IntoVal};
 
 struct Setup {
@@ -94,6 +95,67 @@ fn rejects_invalid_splits() {
         &None,
     );
     assert_eq!(bad_total, Err(Ok(Error::BadShareTotal)));
+}
+
+#[test]
+fn create_split_extends_creator_index_ttl() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+
+    s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    let index_key = DataKey::Created(creator.clone());
+    let ttl = s.env.as_contract(&s.client.address, || {
+        s.env.storage().persistent().get_ttl(&index_key)
+    });
+    assert_eq!(ttl, TTL_EXTEND_TO);
+}
+
+#[test]
+fn splits_of_renews_creator_index_ttl_on_read() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+
+    s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    let index_key = DataKey::Created(creator.clone());
+    let ttl_initial = s.env.as_contract(&s.client.address, || {
+        s.env.storage().persistent().get_ttl(&index_key)
+    });
+    assert!(ttl_initial >= TTL_EXTEND_TO.saturating_sub(1));
+    assert!(ttl_initial <= TTL_EXTEND_TO);
+
+    let sequence = s.env.ledger().sequence();
+    s.env
+        .ledger()
+        .set_sequence_number(sequence + (TTL_EXTEND_TO - TTL_THRESHOLD + 1));
+
+    let ttl_mid = s.env.as_contract(&s.client.address, || {
+        s.env.storage().persistent().get_ttl(&index_key)
+    });
+    assert!(ttl_mid > 0);
+    assert!(ttl_mid < TTL_THRESHOLD);
+
+    let splits = s.client.splits_of(&creator);
+    assert_eq!(splits, vec![&s.env, 0]);
+
+    let ttl_after = s.env.as_contract(&s.client.address, || {
+        s.env.storage().persistent().get_ttl(&index_key)
+    });
+    assert!(ttl_after >= TTL_EXTEND_TO.saturating_sub(1));
+    assert!(ttl_after <= TTL_EXTEND_TO);
 }
 
 #[test]
@@ -192,6 +254,39 @@ fn rounding_dust_goes_to_last_recipient() {
     assert_eq!(token_client.balance(&a), 33);
     assert_eq!(token_client.balance(&b), 33);
     assert_eq!(token_client.balance(&c), 34);
+    assert_eq!(token_client.balance(&payer), 0);
+}
+
+#[test]
+fn rounding_dust_goes_to_last_recipient_when_split() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let leaf_a = Address::generate(&s.env);
+    let leaf_b = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let b = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, token_client) = fund_token(&s.env, &payer, 100);
+
+    let child = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&leaf_a), acct(&leaf_b)],
+        &vec![&s.env, 5_000, 5_000],
+        &None,
+    );
+
+    let parent = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a), acct(&b), Recipient::Split(child)],
+        &vec![&s.env, 3_333, 3_333, 3_334],
+        &None,
+    );
+
+    s.client.pay(&payer, &parent, &token_id, &100);
+
+    assert_eq!(token_client.balance(&a), 33);
+    assert_eq!(token_client.balance(&b), 33);
+    assert_eq!(s.client.balance(&child, &token_id), 34);
     assert_eq!(token_client.balance(&payer), 0);
 }
 
@@ -830,6 +925,48 @@ fn immutable_split_cannot_be_updated() {
 }
 
 #[test]
+fn update_split_rejects_while_balance_outstanding() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let controller = Address::generate(&s.env);
+    let bob = Address::generate(&s.env);
+    let carol = Address::generate(&s.env);
+    let mallory = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let (token_id, token_client) = fund_token(&s.env, &payer, 10_000);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&bob), acct(&carol)],
+        &vec![&s.env, 5_000, 5_000],
+        &Some(controller.clone()),
+    );
+
+    s.client.deposit(&payer, &id, &token_id, &10_000);
+
+    // The controller cannot redirect the routing table while the deposit
+    // is still sitting in escrow.
+    let result =
+        s.client
+            .try_update_split(&id, &vec![&s.env, acct(&mallory)], &vec![&s.env, 10_000]);
+    assert_eq!(result, Err(Ok(Error::SplitHasBalance)));
+
+    // Distributing clears the balance, so the update is allowed afterwards...
+    s.client.distribute(&id, &token_id);
+    assert_eq!(token_client.balance(&bob), 5_000);
+    assert_eq!(token_client.balance(&carol), 5_000);
+
+    s.client
+        .update_split(&id, &vec![&s.env, acct(&mallory)], &vec![&s.env, 10_000]);
+    let split = s.client.get_split(&id);
+    assert_eq!(split.recipients, vec![&s.env, acct(&mallory)]);
+
+    // ...and Mallory only ever sees money deposited after she became a
+    // recipient, never the balance that was already paid out to Bob and Carol.
+    assert_eq!(token_client.balance(&mallory), 0);
+}
+
+#[test]
 fn every_error_code_maps_to_its_triggering_call() {
     let s = setup();
     let creator = Address::generate(&s.env);
@@ -1299,4 +1436,26 @@ fn distribute_cascade_exceeds_max_depth() {
     // MAX_CASCADE_DEPTH is 5, so depth 6 should fail
     let result = s.client.try_distribute_cascade(&id, &token_id, &6);
     assert_eq!(result, Err(Ok(Error::MaxDepthExceeded)));
+}
+
+#[test]
+fn single_recipient_gets_full_amount() {
+    let s = setup();
+    let creator = Address::generate(&s.env);
+    let a = Address::generate(&s.env);
+    let payer = Address::generate(&s.env);
+    let amount: i128 = 1_000_000;
+    let (token_id, token_client) = fund_token(&s.env, &payer, amount);
+
+    let id = s.client.create_split(
+        &creator,
+        &vec![&s.env, acct(&a)],
+        &vec![&s.env, 10_000],
+        &None,
+    );
+
+    s.client.pay(&payer, &id, &token_id, &amount);
+
+    assert_eq!(token_client.balance(&a), amount);
+    assert_eq!(token_client.balance(&payer), 0);
 }
